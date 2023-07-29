@@ -1,5 +1,5 @@
 from torchvision import transforms
-from datasets.Dataloader_University import Sampler_University,Dataloader_University,train_collate_fn
+from datasets.Dataloader_University import Sampler_University, Dataloader_University, train_collate_fn, OrderTrainDataset
 from .random_erasing import RandomErasing
 from .autoaugment import ImageNetPolicy, CIFAR10Policy
 import torch
@@ -79,10 +79,15 @@ def make_dataset(opt):
 
     # custom Dataset
 
-    image_datasets = Dataloader_University(opt.data_dir,transforms=data_transforms)
-    samper = Sampler_University(image_datasets,batchsize=opt.batchsize,sample_num=opt.sample_num)
-    dataloaders =torch.utils.data.DataLoader(image_datasets, batch_size=opt.batchsize,sampler=samper,num_workers=opt.num_worker, pin_memory=True,collate_fn=train_collate_fn)
+    # image_datasets = Dataloader_University(opt.data_dir,transforms=data_transforms)
+    image_datasets = OrderTrainDataset(dataset_path=opt.dataset_path,
+                                       class_path=opt.class_path,
+                                       k=opt.k,
+                                       transforms_drone_street=data_transforms['train'])
+    # samper = Sampler_University(image_datasets,batchsize=opt.batchsize,sample_num=opt.sample_num)
+    dataloaders =torch.utils.data.DataLoader(image_datasets, batch_size=opt.batchsize,shuffle=True,num_workers=opt.num_worker, pin_memory=True)
     dataset_sizes = {x: len(image_datasets)*opt.sample_num for x in ['satellite', 'drone']}
     class_names = image_datasets.cls_names
+    print(dataset_sizes)
     return dataloaders,class_names,dataset_sizes
 

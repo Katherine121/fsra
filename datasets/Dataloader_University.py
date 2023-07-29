@@ -7,6 +7,182 @@ import os
 import numpy as np
 from PIL import Image
 
+
+from collections import OrderedDict
+
+import math
+import os
+import random
+
+import torch
+from PIL import Image
+from torch.utils.data import Dataset
+
+
+class OrderTrainDataset(Dataset):
+    def __init__(self, dataset_path, class_path, k, transforms_drone_street):
+        """
+        train dataset, form a sequence every five frames with an end point frame.
+        :param transform: torchvision.transforms.
+        :param input_len: input sequence length (not containing the end point).
+        """
+        self.transforms_drone_street = transforms_drone_street
+        self.cls_names = []
+
+        res = []
+        new_res = []
+        for j in range(0, k):
+            res.append([])
+            self.cls_names.append(j)
+
+        dir_path1 = os.listdir(dataset_path)
+        dir_path1.sort()
+
+        class_path1 = os.listdir(class_path)
+        class_path1.sort()
+
+        for i in range(0, len(dir_path1)):
+            if i % 5 != 0:
+                dir1 = dir_path1[i]
+                full_dir_path = os.path.join(dataset_path, dir1)
+
+                file_path1 = os.listdir(full_dir_path)
+                file_path1.sort()
+
+                f = open(class_path + "/" + class_path1[i])
+                cluster_labels = []
+                for line in f:
+                    line = line.strip('\n')
+                    cluster_labels.append(int(line))
+
+                for j in range(0, len(file_path1)):
+                    file1 = file_path1[j]
+                    full_file_path = os.path.join(full_dir_path, file1)
+                    res[cluster_labels[j]].append(full_file_path)
+
+        for i in range(0, k):
+            for p in range(0, len(res[i])):
+                random_index1 = random.randint(a=0, b=len(res[i]) - 1)
+                random_index2 = random.randint(a=0, b=len(res[i]) - 1)
+                new_res.append([res[i][p], res[i][random_index1], res[i][random_index2], i])
+        print(len(new_res))
+        self.imgs = new_res
+
+    def __len__(self):
+        """
+        return the length of the dataset.
+        :return:
+        """
+        return len(self.imgs)
+
+    def __getitem__(self, index):
+        """
+        read the image sequence, angle sequence and label corresponding to the index in the dataset.
+        :param index: index of self.imgs.
+        :return: frame sequence, angle sequence,
+                the current position label, the next position label, the direction angle.
+        """
+        imgs = self.imgs[index]
+
+        img1 = Image.open(imgs[0])
+        img1 = img1.convert('RGB')
+        img1 = self.transforms_drone_street(img1)
+
+        img2 = Image.open(imgs[1])
+        img2 = img2.convert('RGB')
+        img2 = self.transforms_drone_street(img2)
+
+        img3 = Image.open(imgs[2])
+        img3 = img3.convert('RGB')
+        img3 = self.transforms_drone_street(img3)
+
+        label = imgs[3]
+
+        return img1, img2, img3, torch.tensor(label, dtype=torch.int64)
+
+
+class OrderTestDataset(Dataset):
+    def __init__(self, dataset_path, class_path, k, transforms_drone_street):
+        """
+        train dataset, form a sequence every five frames with an end point frame.
+        :param transform: torchvision.transforms.
+        :param input_len: input sequence length (not containing the end point).
+        """
+        self.transforms_drone_street = transforms_drone_street
+        self.cls_names = []
+
+        res = []
+        new_res = []
+        for j in range(0, k):
+            res.append([])
+            self.cls_names.append(j)
+
+        dir_path1 = os.listdir(dataset_path)
+        dir_path1.sort()
+
+        class_path1 = os.listdir(class_path)
+        class_path1.sort()
+
+        for i in range(0, len(dir_path1)):
+            if i % 5 == 0:
+                dir1 = dir_path1[i]
+                full_dir_path = os.path.join(dataset_path, dir1)
+
+                file_path1 = os.listdir(full_dir_path)
+                file_path1.sort()
+
+                f = open(class_path + "/" + class_path1[i])
+                cluster_labels = []
+                for line in f:
+                    line = line.strip('\n')
+                    cluster_labels.append(int(line))
+
+                for j in range(0, len(file_path1)):
+                    file1 = file_path1[j]
+                    full_file_path = os.path.join(full_dir_path, file1)
+                    res[cluster_labels[j]].append(full_file_path)
+
+        for i in range(0, k):
+            for p in range(0, len(res[i])):
+                random_index1 = random.randint(a=0, b=len(res[i]) - 1)
+                random_index2 = random.randint(a=0, b=len(res[i]) - 1)
+                new_res.append([res[i][p], res[i][random_index1], res[i][random_index2], i])
+        print(len(new_res))
+        self.imgs = new_res
+
+    def __len__(self):
+        """
+        return the length of the dataset.
+        :return:
+        """
+        return len(self.imgs)
+
+    def __getitem__(self, index):
+        """
+        read the image sequence, angle sequence and label corresponding to the index in the dataset.
+        :param index: index of self.imgs.
+        :return: frame sequence, angle sequence,
+                the current position label, the next position label, the direction angle.
+        """
+        imgs = self.imgs[index]
+
+        img1 = Image.open(imgs[0])
+        img1 = img1.convert('RGB')
+        img1 = self.transforms_drone_street(img1)
+
+        img2 = Image.open(imgs[1])
+        img2 = img2.convert('RGB')
+        img2 = self.transforms_drone_street(img2)
+
+        img3 = Image.open(imgs[2])
+        img3 = img3.convert('RGB')
+        img3 = self.transforms_drone_street(img3)
+
+        label = imgs[3]
+
+        return img1, img2, img3, torch.tensor(label, dtype=torch.int64)
+
+
 class Dataloader_University(Dataset):
     def __init__(self,root,transforms,names=['satellite','street','drone','google']):
         super(Dataloader_University).__init__()
@@ -109,7 +285,7 @@ if __name__ == '__main__':
 
     transform_train_list ={"satellite": transforms.Compose(transform_train_list),
                             "train":transforms.Compose(transform_train_list)}
-    datasets = Dataloader_University(root="/home/dmmm/University-Release/train",transforms=transform_train_list,names=['satellite','drone'])
+    # datasets = Dataloader_University(root="/home/dmmm/University-Release/train",transforms=transform_train_list,names=['satellite','drone'])
     samper = Sampler_University(datasets,8)
     dataloader = DataLoader(datasets,batch_size=8,num_workers=0,sampler=samper,collate_fn=train_collate_fn)
     for data_s,data_d in dataloader:

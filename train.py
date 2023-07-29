@@ -34,6 +34,9 @@ def get_parse():
     parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
     parser.add_argument('--name',default='test', type=str, help='output model name')
     parser.add_argument('--data_dir',default='/home/dmmm/University-Release/train',type=str, help='training dir path')
+    parser.add_argument('--dataset_path',type=str, help='training dir path')
+    parser.add_argument('--class_path',type=str, help='training dir path')
+    parser.add_argument('--k',type=int, help='training dir path')
     parser.add_argument('--train_all', action='store_true', help='use all training data' )
     parser.add_argument('--color_jitter', action='store_true', help='use color jitter in training' )
     parser.add_argument('--num_worker', default=4,type=int, help='' )
@@ -72,8 +75,10 @@ def train_model(model,opt, optimizer, scheduler, dataloaders,dataset_sizes):
     criterion = nn.CrossEntropyLoss()
     loss_kl = nn.KLDivLoss(reduction='batchmean')
     triplet_loss = Tripletloss(margin=opt.triplet_loss)
+    best_acc = 0
 
     for epoch in range(num_epochs):
+        total_loss = 0
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
 
@@ -92,14 +97,13 @@ def train_model(model,opt, optimizer, scheduler, dataloaders,dataset_sizes):
             running_corrects2 = 0.0
             running_corrects3 = 0.0
 
-            for data,data2,data3 in dataloaders:
+            for iter, (inputs,inputs2,inputs3,labels) in enumerate(dataloaders):
                 # satallite # street # drone
                 loss = 0.0
                 # get the inputs
-                inputs, labels = data
-                inputs2, labels2 = data2
-                inputs3, labels3 = data3
-                now_batch_size, c, h, w = inputs.shape
+                labels2 = labels
+                labels3 = labels
+                now_batch_size, c, h, w = inputs.size()
                 if now_batch_size < opt.batchsize:  # skip the last batch
                     continue
                 if use_gpu:
@@ -170,6 +174,7 @@ def train_model(model,opt, optimizer, scheduler, dataloaders,dataset_sizes):
                     warm_up = min(1.0, warm_up + 0.9 / warm_iteration)
                     loss *= warm_up
 
+                total_loss += loss
                 if phase == 'train':
                     if opt.autocast:
                         scaler.scale(loss).backward()
@@ -210,7 +215,8 @@ def train_model(model,opt, optimizer, scheduler, dataloaders,dataset_sizes):
                     else:
                         running_corrects3 += float(torch.sum(preds3 == labels3.data))
 
-
+                if iter % 100 == 0:
+                    print("loss:" + str(loss.item()))
             epoch_cls_loss = running_cls_loss/dataset_sizes['satellite']
             epoch_kl_loss = running_kl_loss /dataset_sizes['satellite']
             epoch_triplet_loss = running_triplet/dataset_sizes['satellite']
@@ -238,8 +244,18 @@ def train_model(model,opt, optimizer, scheduler, dataloaders,dataset_sizes):
             # deep copy the model
             if phase == 'train':
                 scheduler.step()
-            if epoch % 10 == 9 and epoch>=110:
-                save_network(model, opt.name, epoch)
+
+            avg_loss = total_loss / (iter + 1)
+            avg_acc = (epoch_acc + epoch_acc2) / 2
+            with open("save/loss.txt", "a") as file1:
+                file1.write(str(avg_loss.item()) + "\n")
+            file1.close()
+            with open("save/acc.txt", "a") as file1:
+                file1.write(str(avg_acc) + " " + str(epoch_acc) + " " + str(epoch_acc2) + " " + str(best_acc) + "\n")
+            file1.close()
+            torch.save(model, "checkpoint.pth.tar")
+            if epoch_acc >= best_acc:
+                torch.save(model, "save/best.pth.tar")
 
         time_elapsed = time.time() - since
         print('Training complete in {:.0f}m {:.0f}s'.format(
@@ -269,7 +285,6 @@ if __name__ == '__main__':
     model = make_model(opt)
 
     optimizer_ft, exp_lr_scheduler = make_optimizer(model,opt)
-
     model = model.cuda()
     #移动文件到指定文件夹
     copyfiles2checkpoints(opt)
@@ -277,5 +292,5 @@ if __name__ == '__main__':
     if opt.fp16:
         model, optimizer_ft = amp.initialize(model, optimizer_ft, opt_level="O1")
 
-
+    print("start trainig")
     train_model(model,opt, optimizer_ft, exp_lr_scheduler,dataloaders,dataset_sizes)
